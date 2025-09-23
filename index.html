@@ -7,8 +7,24 @@
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
     h1 { text-align:center; }
-    .grid { display:grid; grid-template-columns:repeat(4,150px); gap:10px; justify-content:center; }
-    canvas { background:#fff; border:1px solid #ccc; width:150px !important; height:120px !important; }
+  .grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr); /* 平均分成4等份 */
+  gap: 20px;
+  width: 100%;       /* 撐滿整個頁面 */
+  max-width: 1200px; /* 可以控制總寬度 */
+  margin: 0 auto;    /* 置中 */
+}
+.grid > div {
+  text-align: center;
+}
+canvas {
+  background:#fff;
+  border:1px solid #ccc;
+  width:100% !important;  /* 撐滿每個格子 */
+  height:200px !important; /* 固定高度 */
+}
+
     #news { margin-top:40px; }
     .news-item { border-bottom:1px solid #ddd; padding:6px 0; }
     .news-item a { font-weight:bold; color:#3366cc; text-decoration:none; }
