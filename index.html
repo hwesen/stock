@@ -7,8 +7,12 @@
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
     h1 { text-align:center; }
-    .grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
-    canvas { background:#fff; border:1px solid #ccc; padding:10px; }
+    .grid { display:grid; grid-template-columns:repeat(4,150px); gap:10px; justify-content:center; }
+    canvas { background:#fff; border:1px solid #ccc; width:150px !important; height:120px !important; }
+    #news { margin-top:40px; }
+    .news-item { border-bottom:1px solid #ddd; padding:6px 0; }
+    .news-item a { font-weight:bold; color:#3366cc; text-decoration:none; }
+    .news-item small { color:#888; }
   </style>
 </head>
 <body>
@@ -21,18 +25,24 @@
     <canvas id="chart-NVDA"></canvas>
   </div>
 
+  <section id="news">
+    <h2>最新消息摘要</h2>
+    <div id="news-list"></div>
+  </section>
+
 <script>
 const SHEET_ID = "16Ez6rBX12fI0zm7EIz01UQiiXRNWDBtJwH65TlWiPI0"; 
 const pricesCSV = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Prices`;
+const newsCSV   = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=News`;
 
 async function csv(url){
   const t = await (await fetch(url,{cache:'no-store'})).text();
   return t.trim().split('\n').map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(s=>s.replace(/^"|"$/g,'')));
 }
 
+// 畫股價圖
 async function drawCharts(){
   const rows = await csv(pricesCSV);
-  const headers = rows[0];
   const data = rows.slice(1);
 
   const grouped = {};
@@ -49,36 +59,55 @@ async function drawCharts(){
     new Chart(ctx,{
       type:'bar',
       data:{
-        labels: grouped[sym].dates.slice(-30), // 最近30天
+        labels: grouped[sym].dates.slice(-15), // 最近15天 (避免太擠)
         datasets:[
           {
             type:'line',
             label:`${sym} Close`,
-            data: grouped[sym].closes.slice(-30),
+            data: grouped[sym].closes.slice(-15),
             borderColor:'blue',
+            borderWidth:1,
+            pointRadius:0,
             yAxisID:'y'
           },
           {
             type:'bar',
             label:`${sym} Volume`,
-            data: grouped[sym].volumes.slice(-30),
+            data: grouped[sym].volumes.slice(-15),
             backgroundColor:'rgba(0,0,0,0.2)',
             yAxisID:'y1'
           }
         ]
       },
       options:{
-        responsive:true,
+        plugins:{legend:{display:false}},
+        responsive:false,
         scales:{
-          y:{position:'left',title:{display:true,text:'Price'}},
-          y1:{position:'right',title:{display:true,text:'Volume'},grid:{drawOnChartArea:false}}
+          y:{position:'left',display:false},
+          y1:{position:'right',display:false,grid:{drawOnChartArea:false}}
         }
       }
     });
   });
 }
 
+// 顯示新聞摘要
+async function drawNews(){
+  const rows = await csv(newsCSV);
+  const items = rows.slice(1).slice(0,10); // 取前10筆
+  const box = document.getElementById("news-list");
+  box.innerHTML = items.map(r=>{
+    const [date,ticker,source,title,summary,sentiment,url] = r;
+    return `<div class="news-item">
+      <a href="${url}" target="_blank">${title}</a><br/>
+      <small>${date} · ${source} · ${ticker} · ${sentiment}</small><br/>
+      <div>${summary}</div>
+    </div>`;
+  }).join('');
+}
+
 drawCharts();
+drawNews();
 </script>
 </body>
 </html>
