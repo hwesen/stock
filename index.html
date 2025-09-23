@@ -67,7 +67,12 @@ async function drawCharts(){
     grouped[symbol].closes.push(parseFloat(price));
     grouped[symbol].volumes.push(parseInt(volume||0));
   });
+// 設定最新價到文字
+  const lastIdx = grouped[sym].closes.length - 1;
+  document.getElementById(`price-${sym}`).innerText =
+      grouped[sym].closes[lastIdx].toFixed(2);
 
+  
   Object.keys(grouped).forEach(sym=>{
     const ctx = document.getElementById(`chart-${sym}`).getContext('2d');
     new Chart(ctx,{
