@@ -199,21 +199,27 @@ async function drawSignals(){
     if (!SYMBOLS.includes(sym)) return;
     if (!latest[sym] || r[idx.Date] >= latest[sym][idx.Date]) latest[sym] = r;
   });
+
   let summaryParts=[];
   SYMBOLS.forEach(sym=>{
     const el=document.getElementById(`signal-${sym}`);
     const r=latest[sym];
-    if(!r){ el.textContent='建議：暫無動作'; summaryParts.push(`${sym} HOLD`);}
-    else{
+    if(!r){ 
+      el.innerHTML='<b>建議：</b> 暫無動作';
+      summaryParts.push(`${sym} HOLD`);
+    } else {
       const sig=r[idx.Signal]||'HOLD';
-      if(sig==='BUY'){
-        el.textContent=`建議：BUY｜入場 ${num(r[idx.Entry])}｜停損 ${num(r[idx.Stop])}｜停利 ${num(r[idx.TakeProfit])}｜股數 ${r[idx.Shares]||'-'}`;
-        summaryParts.push(`${sym} BUY`);
-      }else if(sig==='SELL'){
-        el.textContent=`建議：SELL｜入場 ${num(r[idx.Entry])}｜停損 ${num(r[idx.Stop])}｜停利 ${num(r[idx.TakeProfit])}｜股數 ${r[idx.Shares]||'-'}`;
-        summaryParts.push(`${sym} SELL`);
-      }else{
-        el.textContent='建議：暫無動作';
+      if(sig==='BUY' || sig==='SELL'){
+        el.innerHTML=`
+          <b>建議：</b> ${sig}<br>
+          <b>入場：</b> ${num(r[idx.Entry])}<br>
+          <b>停損：</b> ${num(r[idx.Stop])}<br>
+          <b>停利：</b> ${num(r[idx.TakeProfit])}<br>
+          <b>股數：</b> ${r[idx.Shares]||'-'}
+        `;
+        summaryParts.push(`${sym} ${sig}`);
+      } else {
+        el.innerHTML='<b>建議：</b> 暫無動作';
         summaryParts.push(`${sym} HOLD`);
       }
     }
