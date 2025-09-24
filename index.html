@@ -29,25 +29,32 @@
       box-shadow:0 2px 6px rgba(0,0,0,0.08);
     }
     .card h3 { margin:0 0 10px; font-size:16px; }
-    .analysis {
+    .analysis, .news {
       max-width: 1000px;
-      margin: 0 auto;
+      margin: 0 auto 28px;
       padding: 20px;
       background: #fff;
       border-radius: 12px;
       box-shadow: 0 2px 6px rgba(0,0,0,0.08);
     }
-    .analysis h2 {
+    .analysis h2, .news h2 {
       margin-bottom: 12px;
       text-align: center;
     }
-    .analysis p {
+    .analysis p, .news p {
       margin: 6px 0;
       line-height: 1.6;
     }
     .stock-title {
       font-weight: bold;
       color: #333;
+    }
+    .news a {
+      color: #0066cc;
+      text-decoration: none;
+    }
+    .news a:hover {
+      text-decoration: underline;
     }
   </style>
 </head>
@@ -57,10 +64,16 @@
 
   <div class="grid" id="stockGrid"></div>
 
-  <!-- 動態分析說明 -->
+  <!-- 分析說明 -->
   <div class="analysis">
     <h2>📊 分析說明</h2>
     <div id="analysisContent"></div>
+  </div>
+
+  <!-- 新聞摘要 -->
+  <div class="news">
+    <h2>📰 最新消息摘要</h2>
+    <div id="newsContent">載入中...</div>
   </div>
 
   <script>
@@ -68,7 +81,7 @@
 
     async function loadSignals() {
       try {
-        const res = await fetch(WEBAPP_URL);
+        const res = await fetch(WEBAPP_URL + "?type=signals");
         const stocks = await res.json();
 
         // === 更新 Summary ===
@@ -92,7 +105,7 @@
           `;
           grid.appendChild(card);
 
-          // 繪製簡單價格線圖 (只用 SMA20/50/200 + 收盤價)
+          // 繪製均線簡單圖
           const labels = ["SMA20","SMA50","SMA200"];
           const data = [stock.sma20, stock.sma50, stock.sma200];
           new Chart(document.getElementById(`chart-${stock.symbol}`), {
@@ -120,7 +133,7 @@
               text = `${stock.symbol} 現價 ${stock.entry || "N/A"}，屬於 ${stock.regime} 趨勢，暫無明顯突破訊號，建議觀望持有。`;
               break;
             case "BUY":
-              text = `${stock.symbol} 出現買進訊號（20日均線上穿50日，RSI=${stock.rsi}），建議進場價 ${stock.entry}，停損 ${stock.stop}，目標價 ${stock.takeProfit}。`;
+              text = `${stock.symbol} 出現買進訊號（RSI=${stock.rsi}），建議進場價 ${stock.entry}，停損 ${stock.stop}，目標價 ${stock.takeProfit}。`;
               break;
             case "SELL":
               text = `${stock.symbol} 走勢轉弱，出現賣出訊號，可考慮獲利了結或停損出場。`;
@@ -141,7 +154,39 @@
       }
     }
 
+    async function loadNews() {
+      try {
+        const res = await fetch(WEBAPP_URL + "?type=news");
+        const news = await res.json();
+
+        const newsDiv = document.getElementById("newsContent");
+        newsDiv.innerHTML = "";
+
+        news.forEach(item => {
+          const p = document.createElement("p");
+
+          const a = document.createElement("a");
+          a.href = item.url.startsWith("http") ? item.url : "https://" + item.url;
+          a.target = "_blank";
+          a.innerText = item.title || "[無標題]";
+
+          p.appendChild(a);
+          if (item.summary) {
+            const span = document.createElement("span");
+            span.innerText = " - " + item.summary;
+            p.appendChild(span);
+          }
+          newsDiv.appendChild(p);
+        });
+      } catch (err) {
+        document.getElementById("newsContent").innerText = "⚠️ 無法載入新聞";
+        console.error(err);
+      }
+    }
+
+    // 初始化
     loadSignals();
+    loadNews();
   </script>
 </body>
 </html>
