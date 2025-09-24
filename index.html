@@ -130,18 +130,26 @@
         stocks.forEach(stock => {
           let text = "";
           switch(stock.signal) {
-            case "HOLD":
-              text = `${stock.symbol} 現價 ${stock.entry || "N/A"}，屬於 ${stock.regime} 趨勢，暫無明顯突破訊號，建議觀望持有。`;
-              break;
-            case "BUY":
-              text = `${stock.symbol} 出現買進訊號（RSI=${stock.rsi}），建議進場價 ${stock.entry}，停損 ${stock.stop}，目標價 ${stock.takeProfit}。`;
-              break;
-            case "SELL":
-              text = `${stock.symbol} 走勢轉弱，出現賣出訊號，可考慮獲利了結或停損出場。`;
-              break;
-            default:
-              text = `${stock.symbol} 無明確訊號。`;
-          }
+  case "HOLD":
+    text = `${stock.symbol} 現價 ${stock.price || stock.entry || "N/A"}，目前屬於 ${stock.regime} 趨勢。` +
+           ` 技術面觀察：SMA20=${stock.sma20}，SMA50=${stock.sma50}，SMA200=${stock.sma200}，RSI=${stock.rsi}。` +
+           ` 沒有出現明顯的買進或賣出突破訊號，因此建議暫時觀望持有。`;
+    break;
+  case "BUY":
+    text = `${stock.symbol} 出現買進訊號。條件符合：20日均線上穿50日，RSI=${stock.rsi} (<60)，屬於 ${stock.regime} 趨勢。` +
+           ` 建議進場價 ${stock.entry}，停損 ${stock.stop}，目標價 ${stock.takeProfit}。`;
+    break;
+  case "SELL":
+    text = `${stock.symbol} 走勢轉弱，跌破重要均線或動能不足。` +
+           ` 現價 ${stock.price || stock.entry || "N/A"}，屬於 ${stock.regime} 趨勢，` +
+           ` 建議可考慮獲利了結或停損出場。`;
+    break;
+  default:
+    text = `${stock.symbol} 現價 ${stock.price || stock.entry || "N/A"}，指標資料不足或尚未形成明確訊號。` +
+           ` 技術面：SMA20=${stock.sma20}，SMA50=${stock.sma50}，SMA200=${stock.sma200}，RSI=${stock.rsi}。` +
+           ` 建議持續觀察。`;
+}
+
           if (stock.note) text += `（${stock.note}）`;
 
           const p = document.createElement("p");
