@@ -166,9 +166,11 @@
           const p = document.createElement("p");
 
           const a = document.createElement("a");
-          a.href = item.url.startsWith("http") ? item.url : "https://" + item.url;
-          a.target = "_blank";
-          a.innerText = item.title || "[無標題]";
+    
+a.href = item.url;  // 直接用 doGet 回傳的 url
+a.target = "_blank";
+a.innerText = item.title || "[無標題]";
+      
 
           p.appendChild(a);
           if (item.summary) {
