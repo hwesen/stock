@@ -95,14 +95,15 @@
           const card = document.createElement("div");
           card.className = "card";
           card.innerHTML = `
-            <h3>${stock.symbol}</h3>
-            <p>Signal：${stock.signal}</p>
-            <p>Regime：${stock.regime}</p>
-            <p>Entry：${stock.entry || '-'}</p>
-            <p>Stop：${stock.stop || '-'}</p>
-            <p>TP：${stock.takeProfit || '-'}</p>
-            <canvas id="chart-${stock.symbol}" height="120"></canvas>
-          `;
+  <h3>${stock.symbol}</h3>
+  <p>現價：${stock.price || '-'}</p>
+  <p>Signal：${stock.signal}</p>
+  <p>Regime：${stock.regime}</p>
+  <p>Entry：${stock.entry || '-'}</p>
+  <p>Stop：${stock.stop || '-'}</p>
+  <p>TP：${stock.takeProfit || '-'}</p>
+  <canvas id="chart-${stock.symbol}" height="120"></canvas>
+`;
           grid.appendChild(card);
 
           // 繪製均線簡單圖
