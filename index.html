@@ -1,157 +1,227 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>股票監控看板</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    h1 { text-align:center; }
-  .grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr); /* 平均分成4等份 */
-  gap: 20px;
-  width: 100%;       /* 撐滿整個頁面 */
-  max-width: 1200px; /* 可以控制總寬度 */
-  margin: 0 auto;    /* 置中 */
-}
-.grid > div {
-  text-align: center;
-}
-canvas {
-  background:#fff;
-  border:1px solid #ccc;
-  width:100% !important;  /* 撐滿每個格子 */
-  height:200px !important; /* 固定高度 */
-}
-
-    #news { margin-top:40px; }
-    .news-item { border-bottom:1px solid #ddd; padding:6px 0; }
-    .news-item a { font-weight:bold; color:#3366cc; text-decoration:none; }
-    .news-item small { color:#888; }
+    :root { --card-gap: 20px; }
+    body { font-family: Arial, Helvetica, sans-serif; margin: 24px; color:#111; }
+    h1 { text-align:center; margin: 10px 0 24px; }
+    .grid {
+      display:grid;
+      grid-template-columns: repeat(4, 1fr);  /* 平均 4 等分 */
+      gap: var(--card-gap);
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto 28px;
+      align-items: start;
+    }
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    .card {
+      border: 1px solid #ddd; border-radius: 8px; padding: 10px;
+      background: #fff; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,.04);
+    }
+    .price-line { margin-top: 6px; font-weight: 600; }
+    .signal-line { margin-top: 2px; font-size: 12px; color:#555; }
+    canvas { width: 100% !important; height: 200px !important; }
+    /* News */
+    #news { max-width: 1000px; margin: 30px auto; }
+    #news h2 { margin: 8px 0 12px; }
+    .news-item { padding: 10px 0; border-bottom: 1px solid #eee; }
+    .news-item a { color:#2257d1; font-weight:700; text-decoration:none; }
+    .news-meta { color:#666; font-size:12px; margin-top: 2px; }
+    .summary { color:#222; margin-top: 4px; }
+    /* 小工具列 */
+    .toolbar { max-width: 1200px; margin: 0 auto 12px; display:flex; gap:10px; justify-content:flex-end; }
+    .btn {
+      border:1px solid #ccc; padding:6px 10px; border-radius:6px; background:#fafafa; cursor:pointer;
+    }
+    .btn:hover { background:#f0f0f0; }
   </style>
 </head>
 <body>
   <h1>股票監控看板</h1>
 
- <div class="grid">
-  <div>
-    <canvas id="chart-BABA"></canvas>
-    <div>BABA: <span id="price-BABA"></span></div>
+  <div class="toolbar">
+    <button class="btn" id="refreshBtn">重新整理</button>
   </div>
-  <div>
-    <canvas id="chart-UNH"></canvas>
-    <div>UNH: <span id="price-UNH"></span></div>
+
+  <!-- 四等分圖表卡片 -->
+  <div class="grid" id="cards">
+    <!-- 會由 JS 動態插入四張卡片 -->
   </div>
-  <div>
-    <canvas id="chart-TSLA"></canvas>
-    <div>TSLA: <span id="price-TSLA"></span></div>
-  </div>
-  <div>
-    <canvas id="chart-NVDA"></canvas>
-    <div>NVDA: <span id="price-NVDA"></span></div>
-  </div>
-</div>
 
-
-
-
+  <!-- 新聞摘要 -->
   <section id="news">
     <h2>最新消息摘要</h2>
     <div id="news-list"></div>
   </section>
 
 <script>
-const SHEET_ID = "16Ez6rBX12fI0zm7EIz01UQiiXRNWDBtJwH65TlWiPI0"; 
-const pricesCSV = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Prices`;
-const newsCSV   = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=News`;
+/* ========= 設定 ========= */
+const SHEET_ID = "16Ez6rBX12fI0zm7EIz01UQiiXRNWDBtJwH65TlWiPI0";
+const SYMBOLS  = ["BABA","UNH","TSLA","NVDA"];
+/* ======================= */
 
-async function csv(url){
-  const t = await (await fetch(url,{cache:'no-store'})).text();
-  return t.trim().split('\n').map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(s=>s.replace(/^"|"$/g,'')));
+const pricesCSV  = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Prices`;
+const newsCSV    = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=News`;
+const signalsCSV = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Signals`;
+
+/* 產生四張卡片骨架（canvas + 價格 + 建議） */
+function buildCards(){
+  const wrap = document.getElementById('cards');
+  wrap.innerHTML = SYMBOLS.map(sym => `
+    <div class="card">
+      <canvas id="chart-${sym}"></canvas>
+      <div class="price-line">${sym}: <span id="price-${sym}">—</span></div>
+      <div class="signal-line" id="signal-${sym}">建議：—</div>
+    </div>
+  `).join('');
 }
 
-// 畫股價圖
+/* 讀 CSV 成為二維陣列 */
+async function csv(url){
+  const text = await (await fetch(url, {cache:'no-store'})).text();
+  return text.trim().split('\n').map(row =>
+    row.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(s => s.replace(/^"|"$/g,''))
+  );
+}
+
+/* 畫股價 + 成交量混合圖，並顯示最新價格 */
 async function drawCharts(){
   const rows = await csv(pricesCSV);
-  const data = rows.slice(1); // 去掉標頭
+  if (!rows.length) return;
+  const data = rows.slice(1); // 去標頭
 
-  // 整理成 {symbol: {dates:[], closes:[], volumes:[]}}
+  // 按 symbol 分組
   const grouped = {};
-  data.forEach(r=>{
+  for (const r of data){
     const [symbol,date,price,open,high,low,prevClose,volume] = r;
-    if(!grouped[symbol]) grouped[symbol]={dates:[],closes:[],volumes:[]};
+    if (!SYMBOLS.includes(symbol)) continue; // 忽略其他
+    if (!grouped[symbol]) grouped[symbol] = {dates:[], closes:[], volumes:[]};
     grouped[symbol].dates.push(date);
     grouped[symbol].closes.push(parseFloat(price));
-    grouped[symbol].volumes.push(parseInt(volume||0));
-  });
+    grouped[symbol].volumes.push(parseInt(volume||0,10));
+  }
 
-  Object.keys(grouped).forEach(sym=>{
+  SYMBOLS.forEach(sym=>{
+    const g = grouped[sym];
+    if (!g || !g.dates.length) return;
+
+    // 取最近 15 根，避免太擠
+    const labels  = g.dates.slice(-15);
+    const closes  = g.closes.slice(-15);
+    const volumes = g.volumes.slice(-15);
+
+    // 更新最新價格
+    const lastClose = closes[closes.length-1];
+    const priceEl = document.getElementById(`price-${sym}`);
+    if (priceEl && isFinite(lastClose)) priceEl.textContent = lastClose.toFixed(2);
+
+    // 畫圖
     const ctx = document.getElementById(`chart-${sym}`).getContext('2d');
-
-    // 最近 15 天
-    const labels = grouped[sym].dates.slice(-15);
-    const closes = grouped[sym].closes.slice(-15);
-    const volumes = grouped[sym].volumes.slice(-15);
-
-    // 繪製圖表
-    new Chart(ctx,{
+    new Chart(ctx, {
       type:'bar',
       data:{
-        labels: labels,
+        labels,
         datasets:[
-          {
-            type:'line',
-            label:`${sym} Close`,
-            data: closes,
-            borderColor:'blue',
-            borderWidth:1,
-            pointRadius:0,
-            yAxisID:'y'
-          },
-          {
-            type:'bar',
-            label:`${sym} Volume`,
-            data: volumes,
-            backgroundColor:'rgba(0,0,0,0.2)',
-            yAxisID:'y1'
-          }
+          { type:'line', label:`${sym} Close`, data: closes, borderColor:'#1f6feb',
+            borderWidth:1, pointRadius:0, yAxisID:'y' },
+          { type:'bar',  label:`${sym} Volume`, data: volumes, backgroundColor:'rgba(0,0,0,0.2)', yAxisID:'y1' }
         ]
       },
       options:{
-        plugins:{legend:{display:false}},
-        responsive:false,
+        plugins:{ legend:{display:false} },
+        responsive:true,
+        maintainAspectRatio:false,
         scales:{
-          y:{position:'left',display:false},
-          y1:{position:'right',display:false,grid:{drawOnChartArea:false}}
+          y:  { position:'left',  display:false },
+          y1: { position:'right', display:false, grid:{ drawOnChartArea:false } }
         }
       }
     });
-
-    // 在圖表下方顯示最新收盤價
-    const lastClose = closes[closes.length-1];
-    document.getElementById(`price-${sym}`).innerText = lastClose.toFixed(2);
   });
 }
 
+/* 顯示今日 Signals（若無則顯示 暫無動作） */
+async function drawSignals(){
+  try{
+    const rows = await csv(signalsCSV);
+    if (!rows.length) return;
+    const header = rows[0];
+    // 預期欄位：Date, Symbol, Regime, Signal, Entry, Stop, TakeProfit, ATR14, RSI14, SMA20, SMA50, SMA200, Shares, Note
+    const idx = Object.fromEntries(header.map((k,i)=>[k,i]));
+    const data = rows.slice(1);
 
-// 顯示新聞摘要
+    // 找出每個 symbol 最新日期那筆
+    const latest = {};
+    data.forEach(r=>{
+      const sym = r[idx.Symbol];
+      if (!SYMBOLS.includes(sym)) return;
+      if (!latest[sym] || r[idx.Date] >= latest[sym][idx.Date]) latest[sym] = r;
+    });
+
+    SYMBOLS.forEach(sym=>{
+      const el = document.getElementById(`signal-${sym}`);
+      if (!el) return;
+      const r = latest[sym];
+      if (!r){
+        el.textContent = '建議：暫無動作';
+      }else{
+        const sig = r[idx.Signal] || 'HOLD';
+        if (sig === 'BUY'){
+          el.textContent = `建議：BUY｜入場 ${num(r[idx.Entry])}｜停損 ${num(r[idx.Stop])}｜停利 ${num(r[idx.TakeProfit])}｜股數 ${r[idx.Shares] || '-'}`;
+        } else if (sig === 'SELL'){
+          el.textContent = `建議：SELL｜入場 ${num(r[idx.Entry])}｜停損 ${num(r[idx.Stop])}｜停利 ${num(r[idx.TakeProfit])}｜股數 ${r[idx.Shares] || '-'}`;
+        } else {
+          el.textContent = '建議：暫無動作';
+        }
+      }
+    });
+  }catch(e){
+    console.error('signals error', e);
+  }
+}
+function num(x){ const f = parseFloat(x); return isFinite(f)? f.toFixed(2) : '-'; }
+
+/* 顯示最新消息摘要（抓 News 表前 15 筆） */
 async function drawNews(){
-  const rows = await csv(newsCSV);
-  const items = rows.slice(1).slice(0,10); // 取前10筆
-  const box = document.getElementById("news-list");
-  box.innerHTML = items.map(r=>{
-    const [date,ticker,source,title,summary,sentiment,url] = r;
-    return `<div class="news-item">
-      <a href="${url}" target="_blank">${title}</a><br/>
-      <small>${date} · ${source} · ${ticker} · ${sentiment}</small><br/>
-      <div>${summary}</div>
-    </div>`;
-  }).join('');
+  try{
+    const rows = await csv(newsCSV);
+    if (!rows.length) return;
+    const header = rows[0]; // 期待：標題｜日期｜來源｜摘要｜情緒
+    const data = rows.slice(1);
+    const box = document.getElementById('news-list');
+    box.innerHTML = data.slice(0,15).map(r=>{
+      const [title,date,source,summary,sent] = r;
+      return `<div class="news-item">
+        <a href="#" onclick="return false">${escapeHtml(title||'—')}</a>
+        <div class="news-meta">${escapeHtml(date||'')}${source? ' · '+escapeHtml(source):''}${sent? ' · '+escapeHtml(sent):''}</div>
+        <div class="summary">${escapeHtml(summary||'')}</div>
+      </div>`;
+    }).join('');
+  }catch(e){
+    console.error('news error', e);
+  }
 }
 
-drawCharts();
-drawNews();
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
+}
+
+/* 入口：建立卡片 → 畫圖 → 顯示 signals/news */
+async function boot(){
+  buildCards();
+  await drawCharts();
+  await drawSignals();
+  await drawNews();
+}
+document.getElementById('refreshBtn').addEventListener('click', boot);
+boot();
 </script>
 </body>
 </html>
