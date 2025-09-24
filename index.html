@@ -8,10 +8,11 @@
   <style>
     :root { --card-gap: 20px; }
     body { font-family: Arial, Helvetica, sans-serif; margin: 24px; color:#111; }
-    h1 { text-align:center; margin: 10px 0 24px; }
+    h1 { text-align:center; margin: 10px 0 12px; }
+    #summary { text-align:center; font-weight:600; margin-bottom:20px; color:#333; }
     .grid {
       display:grid;
-      grid-template-columns: repeat(4, 1fr);  /* 平均 4 等分 */
+      grid-template-columns: repeat(4, 1fr);
       gap: var(--card-gap);
       width: 100%;
       max-width: 1200px;
@@ -28,14 +29,12 @@
     .price-line { margin-top: 6px; font-weight: 600; }
     .signal-line { margin-top: 2px; font-size: 12px; color:#555; }
     canvas { width: 100% !important; height: 200px !important; }
-    /* News */
     #news { max-width: 1000px; margin: 30px auto; }
     #news h2 { margin: 8px 0 12px; }
     .news-item { padding: 10px 0; border-bottom: 1px solid #eee; }
     .news-item a { color:#2257d1; font-weight:700; text-decoration:none; }
     .news-meta { color:#666; font-size:12px; margin-top: 2px; }
     .summary { color:#222; margin-top: 4px; }
-    /* 小工具列 */
     .toolbar { max-width: 1200px; margin: 0 auto 12px; display:flex; gap:10px; justify-content:flex-end; }
     .btn {
       border:1px solid #ccc; padding:6px 10px; border-radius:6px; background:#fafafa; cursor:pointer;
@@ -45,33 +44,26 @@
 </head>
 <body>
   <h1>股票監控看板</h1>
+  <div id="summary">今日建議：讀取中...</div>
 
   <div class="toolbar">
     <button class="btn" id="refreshBtn">重新整理</button>
   </div>
 
-  <!-- 四等分圖表卡片 -->
-  <div class="grid" id="cards">
-    <!-- 會由 JS 動態插入四張卡片 -->
-  </div>
+  <div class="grid" id="cards"></div>
 
-  <!-- 新聞摘要 -->
   <section id="news">
     <h2>最新消息摘要</h2>
     <div id="news-list"></div>
   </section>
 
 <script>
-/* ========= 設定 ========= */
-const SHEET_ID = "16Ez6rBX12fI0zm7EIz01UQiiXRNWDBtJwH65TlWiPI0";
+const SHEET_ID = "在這裡填入你的試算表ID";
 const SYMBOLS  = ["BABA","UNH","TSLA","NVDA"];
-/* ======================= */
-
 const pricesCSV  = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Prices`;
 const newsCSV    = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=News`;
 const signalsCSV = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Signals`;
 
-/* 產生四張卡片骨架（canvas + 價格 + 建議） */
 function buildCards(){
   const wrap = document.getElementById('cards');
   wrap.innerHTML = SYMBOLS.map(sym => `
@@ -83,7 +75,6 @@ function buildCards(){
   `).join('');
 }
 
-/* 讀 CSV 成為二維陣列 */
 async function csv(url){
   const text = await (await fetch(url, {cache:'no-store'})).text();
   return text.trim().split('\n').map(row =>
@@ -91,135 +82,165 @@ async function csv(url){
   );
 }
 
-/* 畫股價 + 成交量混合圖，並顯示最新價格 */
 async function drawCharts(){
   const rows = await csv(pricesCSV);
   if (!rows.length) return;
-  const data = rows.slice(1); // 去標頭
+  const data = rows.slice(1);
 
-  // 按 symbol 分組
   const grouped = {};
   for (const r of data){
     const [symbol,date,price,open,high,low,prevClose,volume] = r;
-    if (!SYMBOLS.includes(symbol)) continue; // 忽略其他
-    if (!grouped[symbol]) grouped[symbol] = {dates:[], closes:[], volumes:[]};
+    if (!SYMBOLS.includes(symbol)) continue;
+    if (!grouped[symbol]) grouped[symbol] = {dates:[], closes:[], highs:[], lows:[]};
     grouped[symbol].dates.push(date);
     grouped[symbol].closes.push(parseFloat(price));
-    grouped[symbol].volumes.push(parseInt(volume||0,10));
+    grouped[symbol].highs.push(parseFloat(high));
+    grouped[symbol].lows.push(parseFloat(low));
   }
 
   SYMBOLS.forEach(sym=>{
     const g = grouped[sym];
-    if (!g || !g.dates.length) return;
+    if (!g) return;
+    const labels = g.dates.slice(-30);
+    const closes = g.closes.slice(-30);
+    const highs  = g.highs.slice(-30);
+    const lows   = g.lows.slice(-30);
+    const sma20  = calcSMA(closes,20);
 
-    // 取最近 15 根，避免太擠
-    const labels  = g.dates.slice(-15);
-    const closes  = g.closes.slice(-15);
-    const volumes = g.volumes.slice(-15);
-
-    // 更新最新價格
     const lastClose = closes[closes.length-1];
-    const priceEl = document.getElementById(`price-${sym}`);
-    if (priceEl && isFinite(lastClose)) priceEl.textContent = lastClose.toFixed(2);
+    document.getElementById(`price-${sym}`).textContent = lastClose.toFixed(2);
 
-    // 畫圖
     const ctx = document.getElementById(`chart-${sym}`).getContext('2d');
-    new Chart(ctx, {
-      type:'bar',
+    new Chart(ctx,{
       data:{
         labels,
         datasets:[
-          { type:'line', label:`${sym} Close`, data: closes, borderColor:'#1f6feb',
-            borderWidth:1, pointRadius:0, yAxisID:'y' },
-          { type:'bar',  label:`${sym} Volume`, data: volumes, backgroundColor:'rgba(0,0,0,0.2)', yAxisID:'y1' }
+          {
+            type:'line',
+            label:`${sym} High-Low`,
+            data: highs.map((h,i)=>({y:h,yMin:lows[i]})), // plugin 會用
+            borderColor:'rgba(0,0,0,0)',
+            backgroundColor:'rgba(200,200,200,0.3)',
+            fill:true,
+            parsing:false,
+            yAxisID:'y'
+          },
+          {
+            type:'bar',
+            label:`${sym} Close`,
+            data: closes,
+            backgroundColor:'rgba(30,144,255,0.6)',
+            yAxisID:'y'
+          },
+          {
+            type:'line',
+            label:`${sym} SMA20`,
+            data: sma20,
+            borderColor:'red',
+            borderWidth:2,
+            pointRadius:0,
+            yAxisID:'y'
+          }
         ]
       },
       options:{
         plugins:{ legend:{display:false} },
         responsive:true,
         maintainAspectRatio:false,
-        scales:{
-          y:  { position:'left',  display:false },
-          y1: { position:'right', display:false, grid:{ drawOnChartArea:false } }
+        scales:{ y:{ title:{display:true,text:'股價'} } },
+        elements: {
+          line: { tension:0 }
         }
-      }
+      },
+      plugins:[{
+        id:'hlBand',
+        beforeDatasetDraw(chart,args,opts){
+          if(args.index===0){
+            const {ctx, chartArea:{top,bottom}, scales:{x,y}} = chart;
+            ctx.save();
+            const meta = chart.getDatasetMeta(args.index);
+            meta.data.forEach((pt,i)=>{
+              const h = chart.data.datasets[0].data[i].y;
+              const l = chart.data.datasets[0].data[i].yMin;
+              const xC = pt.x;
+              ctx.beginPath();
+              ctx.strokeStyle='rgba(180,180,180,0.5)';
+              ctx.moveTo(xC, y.getPixelForValue(h));
+              ctx.lineTo(xC, y.getPixelForValue(l));
+              ctx.stroke();
+            });
+            ctx.restore();
+          }
+        }
+      }]
     });
   });
 }
 
-/* 顯示今日 Signals（若無則顯示 暫無動作） */
+function calcSMA(arr,n){
+  const out=new Array(arr.length).fill(null);
+  for(let i=n-1;i<arr.length;i++){
+    let sum=0;
+    for(let j=0;j<n;j++) sum+=arr[i-j];
+    out[i]=sum/n;
+  }
+  return out;
+}
+
 async function drawSignals(){
-  try{
-    const rows = await csv(signalsCSV);
-    if (!rows.length) return;
-    const header = rows[0];
-    // 預期欄位：Date, Symbol, Regime, Signal, Entry, Stop, TakeProfit, ATR14, RSI14, SMA20, SMA50, SMA200, Shares, Note
-    const idx = Object.fromEntries(header.map((k,i)=>[k,i]));
-    const data = rows.slice(1);
-
-    // 找出每個 symbol 最新日期那筆
-    const latest = {};
-    data.forEach(r=>{
-      const sym = r[idx.Symbol];
-      if (!SYMBOLS.includes(sym)) return;
-      if (!latest[sym] || r[idx.Date] >= latest[sym][idx.Date]) latest[sym] = r;
-    });
-
-    SYMBOLS.forEach(sym=>{
-      const el = document.getElementById(`signal-${sym}`);
-      if (!el) return;
-      const r = latest[sym];
-      if (!r){
-        el.textContent = '建議：暫無動作';
+  const rows = await csv(signalsCSV);
+  if (!rows.length) return;
+  const header = rows[0];
+  const idx = Object.fromEntries(header.map((k,i)=>[k,i]));
+  const data = rows.slice(1);
+  const latest = {};
+  data.forEach(r=>{
+    const sym = r[idx.Symbol];
+    if (!SYMBOLS.includes(sym)) return;
+    if (!latest[sym] || r[idx.Date] >= latest[sym][idx.Date]) latest[sym] = r;
+  });
+  let summaryParts=[];
+  SYMBOLS.forEach(sym=>{
+    const el=document.getElementById(`signal-${sym}`);
+    const r=latest[sym];
+    if(!r){ el.textContent='建議：暫無動作'; summaryParts.push(`${sym} HOLD`);}
+    else{
+      const sig=r[idx.Signal]||'HOLD';
+      if(sig==='BUY'){
+        el.textContent=`建議：BUY｜入場 ${num(r[idx.Entry])}｜停損 ${num(r[idx.Stop])}｜停利 ${num(r[idx.TakeProfit])}｜股數 ${r[idx.Shares]||'-'}`;
+        summaryParts.push(`${sym} BUY`);
+      }else if(sig==='SELL'){
+        el.textContent=`建議：SELL｜入場 ${num(r[idx.Entry])}｜停損 ${num(r[idx.Stop])}｜停利 ${num(r[idx.TakeProfit])}｜股數 ${r[idx.Shares]||'-'}`;
+        summaryParts.push(`${sym} SELL`);
       }else{
-        const sig = r[idx.Signal] || 'HOLD';
-        if (sig === 'BUY'){
-          el.textContent = `建議：BUY｜入場 ${num(r[idx.Entry])}｜停損 ${num(r[idx.Stop])}｜停利 ${num(r[idx.TakeProfit])}｜股數 ${r[idx.Shares] || '-'}`;
-        } else if (sig === 'SELL'){
-          el.textContent = `建議：SELL｜入場 ${num(r[idx.Entry])}｜停損 ${num(r[idx.Stop])}｜停利 ${num(r[idx.TakeProfit])}｜股數 ${r[idx.Shares] || '-'}`;
-        } else {
-          el.textContent = '建議：暫無動作';
-        }
+        el.textContent='建議：暫無動作';
+        summaryParts.push(`${sym} HOLD`);
       }
-    });
-  }catch(e){
-    console.error('signals error', e);
-  }
+    }
+  });
+  document.getElementById('summary').textContent="今日建議："+summaryParts.join(" ｜ ");
 }
-function num(x){ const f = parseFloat(x); return isFinite(f)? f.toFixed(2) : '-'; }
 
-/* 顯示最新消息摘要（抓 News 表前 15 筆） */
+function num(x){ const f=parseFloat(x); return isFinite(f)? f.toFixed(2):'-'; }
+
 async function drawNews(){
-  try{
-    const rows = await csv(newsCSV);
-    if (!rows.length) return;
-    const header = rows[0]; // 期待：標題｜日期｜來源｜摘要｜情緒
-    const data = rows.slice(1);
-    const box = document.getElementById('news-list');
-    box.innerHTML = data.slice(0,15).map(r=>{
-      const [title,date,source,summary,sent] = r;
-      return `<div class="news-item">
-        <a href="#" onclick="return false">${escapeHtml(title||'—')}</a>
-        <div class="news-meta">${escapeHtml(date||'')}${source? ' · '+escapeHtml(source):''}${sent? ' · '+escapeHtml(sent):''}</div>
-        <div class="summary">${escapeHtml(summary||'')}</div>
-      </div>`;
-    }).join('');
-  }catch(e){
-    console.error('news error', e);
-  }
+  const rows=await csv(newsCSV);
+  if(!rows.length)return;
+  const data=rows.slice(1);
+  const box=document.getElementById('news-list');
+  box.innerHTML=data.slice(0,15).map(r=>{
+    const [title,date,source,summary,sent]=r;
+    return `<div class="news-item">
+      <a href="#" onclick="return false">${escapeHtml(title||'—')}</a>
+      <div class="news-meta">${escapeHtml(date||'')}${source?' · '+escapeHtml(source):''}${sent?' · '+escapeHtml(sent):''}</div>
+      <div class="summary">${escapeHtml(summary||'')}</div>
+    </div>`;
+  }).join('');
 }
 
-function escapeHtml(s){
-  return String(s).replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
-}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));}
 
-/* 入口：建立卡片 → 畫圖 → 顯示 signals/news */
-async function boot(){
-  buildCards();
-  await drawCharts();
-  await drawSignals();
-  await drawNews();
-}
+async function boot(){ buildCards(); await drawCharts(); await drawSignals(); await drawNews(); }
 document.getElementById('refreshBtn').addEventListener('click', boot);
 boot();
 </script>
