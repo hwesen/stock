@@ -116,23 +116,19 @@
             // 分析說明
             let text = "";
             switch(stock.signal) {
-              case "HOLD":
-                text = `${stock.symbol} 現價 ${stock.entry || "N/A"}，處於 ${stock.regime} 趨勢，暫無突破訊號，建議持有觀望。`;
-                break;
-              case "BUY":
-                text = `${stock.symbol} 出現買進訊號（RSI=${stock.rsi}），建議進場 ${stock.entry}，停損 ${stock.stop}，目標 ${stock.takeProfit}。`;
-                break;
-              case "SELL":
-                text = `${stock.symbol} 出現賣出訊號，走勢轉弱，建議停利或停損出場。`;
-                break;
-              default:
-                text = `${stock.symbol} 無明確訊號。`;
-            }
-            if (stock.note) text += `（${stock.note}）`;
-            const p = document.createElement("p");
-            p.innerHTML = `<span class="stock-title">${stock.symbol}：</span> ${text}`;
-            analysisDiv.appendChild(p);
-          }
+  case "HOLD":
+    text = `${stock.symbol} 現價 ${stock.entry}，處於 ${stock.regime} 趨勢，暫無突破訊號，建議持有觀望。`;
+    break;
+  case "BUY":
+    text = `${stock.symbol} 出現買進訊號（RSI=${stock.rsi}），建議進場 ${stock.entry}，停損 ${stock.stop}，目標 ${stock.takeProfit}，建議倉位 ${stock.shares || '-'} 股。`;
+    break;
+  case "SELL":
+    text = `${stock.symbol} 出現賣出訊號，現價 ${stock.entry}，建議停利 ${stock.takeProfit}、停損 ${stock.stop}。`;
+    break;
+  default:
+    text = `${stock.symbol} 無明確訊號。`;
+}
+
         });
 
       } catch (err) {
