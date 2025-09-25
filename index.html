@@ -144,30 +144,62 @@
     }
 
     async function loadNews() {
-      try {
-        const res = await fetch(WEBAPP_URL + "?type=news");
-        const news = await res.json();
-        const newsDiv = document.getElementById("newsContent");
-        newsDiv.innerHTML = "";
-        news.forEach(item => {
-          const p = document.createElement("p");
-          const a = document.createElement("a");
-          a.href = item.url;
-          a.target = "_blank";
-          a.innerText = `[${item.source}] ${item.title}`;
-          p.appendChild(a);
-          if (item.summary) {
-            const span = document.createElement("span");
-            span.innerText = " - " + item.summary;
-            p.appendChild(span);
-          }
-          newsDiv.appendChild(p);
-        });
-      } catch (err) {
-        document.getElementById("newsContent").innerText = "⚠️ 無法載入新聞";
-        console.error(err);
-      }
+  try {
+    const res = await fetch(WEBAPP_URL + "?type=news");
+    let news = await res.json();
+    const newsDiv = document.getElementById("newsContent");
+    newsDiv.innerHTML = "";
+
+    // 先顯示前 10 筆
+    const initialNews = news.slice(0, 10);
+    renderNews(initialNews, newsDiv);
+
+    // 如果超過 10 筆，加上「查看更多」按鈕
+    if (news.length > 10) {
+      const btn = document.createElement("button");
+      btn.innerText = "查看更多";
+      btn.style.marginTop = "12px";
+      btn.style.padding = "8px 16px";
+      btn.style.border = "none";
+      btn.style.borderRadius = "6px";
+      btn.style.background = "#0077cc";
+      btn.style.color = "#fff";
+      btn.style.cursor = "pointer";
+
+      btn.addEventListener("click", () => {
+        // 顯示剩下的新聞
+        const moreNews = news.slice(10);
+        renderNews(moreNews, newsDiv);
+        btn.remove(); // 點擊後移除按鈕
+      });
+
+      newsDiv.appendChild(btn);
     }
+  } catch (err) {
+    document.getElementById("newsContent").innerText = "⚠️ 無法載入新聞";
+    console.error(err);
+  }
+}
+
+// 共用函式：渲染新聞
+function renderNews(items, container) {
+  items.forEach(item => {
+    const p = document.createElement("p");
+    const a = document.createElement("a");
+    a.href = item.url;
+    a.target = "_blank";
+    a.innerText = `[${item.source}] ${item.title}`;
+    p.appendChild(a);
+
+    if (item.summary) {
+      const span = document.createElement("span");
+      span.innerText = " - " + item.summary;
+      p.appendChild(span);
+    }
+    container.appendChild(p);
+  });
+}
+
 
     // 初始化
     loadSignals();
