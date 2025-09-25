@@ -1,206 +1,177 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh-Hant">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>投資資訊 BI Dashboard</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body { font-family: "Microsoft JhengHei", sans-serif; background: #f5f7fa; margin: 20px; }
-    h1 { text-align: center; margin-bottom: 20px; }
-    #summary { text-align:center; font-weight:bold; font-size:18px; margin-bottom:20px; }
+    body { font-family: "Microsoft JhengHei", sans-serif; margin: 20px; background:#f5f7fa; color:#111; }
+    h1 { text-align:center; margin:10px 0 20px; }
+    #spySummary, #summary, .analysis, .news {
+      max-width:1000px;
+      margin:0 auto 24px;
+      padding:16px 20px;
+      border-radius:12px;
+      background:#fff;
+      box-shadow:0 2px 6px rgba(0,0,0,0.08);
+    }
+    #spySummary h2, #summary h2, .analysis h2, .news h2 { margin:0 0 12px; text-align:center; }
     .grid {
       display:grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 20px;
-      width: 100%;
-      max-width: 1200px;
-      margin: 0 auto 30px;
-      align-items: start;
-    }
-    @media (max-width: 900px) {
-      .grid { grid-template-columns: repeat(2, 1fr); }
+      grid-template-columns: repeat(auto-fill,minmax(220px,1fr));
+      gap:16px;
+      margin-top:12px;
     }
     .card {
-      background:white;
-      border-radius:12px;
-      padding:16px;
-      box-shadow:0 2px 6px rgba(0,0,0,0.1);
+      background:#fafafa;
+      border-radius:10px;
+      padding:12px;
+      box-shadow:0 1px 4px rgba(0,0,0,0.08);
     }
-    .card h3 { margin:0 0 10px; font-size:16px; }
-    .analysis, .news {
-      max-width: 1000px;
-      margin: 0 auto 28px;
-      padding: 20px;
-      background: #fff;
-      border-radius: 12px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-    }
-    .analysis h2, .news h2 {
-      margin-bottom: 12px;
-      text-align: center;
-    }
-    .analysis p, .news p {
-      margin: 6px 0;
-      line-height: 1.6;
-    }
-    .stock-title {
-      font-weight: bold;
-      color: #333;
-    }
-    .news a {
-      color: #0066cc;
-      text-decoration: none;
-    }
-    .news a:hover { text-decoration: underline; }
+    .card h3 { margin:0 0 8px; font-size:16px; }
+    .analysis p, .news p { margin:6px 0; line-height:1.5; }
+    .stock-title { font-weight:bold; color:#333; }
+    .news a { color:#0077cc; text-decoration:none; }
+    .news a:hover { text-decoration:underline; }
   </style>
 </head>
 <body>
+  <h1>📊 投資資訊 BI Dashboard</h1>
 
-<h1>📊 投資資訊 BI Dashboard</h1>
-<div id="summary">今日建議載入中...</div>
+  <!-- 大盤 Summary -->
+  <div id="spySummary">
+    <h2>📈 大盤 (SPY) 狀態</h2>
+    <div id="spyContent">載入中...</div>
+  </div>
 
-<!-- 股票卡片 -->
-<div class="grid" id="stockGrid"></div>
+  <!-- 個股建議 -->
+  <div id="summary">
+    <h2>💡 今日個股建議</h2>
+    <div class="grid" id="stockGrid">載入中...</div>
+  </div>
 
-<!-- 分析說明 -->
-<div class="analysis">
-  <h2>📊 分析說明</h2>
-  <div id="analysisContent"></div>
-</div>
+  <!-- 分析說明 -->
+  <div class="analysis">
+    <h2>📊 分析說明</h2>
+    <div id="analysisContent">載入中...</div>
+  </div>
 
-<!-- 新聞摘要 -->
-<div class="news">
-  <h2>📰 最新消息摘要</h2>
-  <div id="newsContent">載入中...</div>
-</div>
+  <!-- 新聞摘要 -->
+  <div class="news">
+    <h2>📰 最新消息摘要</h2>
+    <div id="newsContent">載入中...</div>
+  </div>
 
-<script>
-  // 換成你部署的 Google Apps Script WebApp URL
-  const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwTihz3-zh_A-sOX9yhRehETUNqsgOFCAQljpKRfj7R5P6SSUpyJezo9bremy7JiYkyWQ/exec";
+  <script>
+    const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwTihz3-zh_A-sOX9yhRehETUNqsgOFCAQljpKRfj7R5P6SSUpyJezo9bremy7JiYkyWQ/exec"; 
+    // ↑ 換成你部署好的 Apps Script WebApp URL
 
-  async function loadSignals() {
-    try {
-      const res = await fetch(WEBAPP_URL + "?type=signals");
-      const stocks = await res.json();
+    async function loadSignals() {
+      try {
+        const res = await fetch(WEBAPP_URL + "?type=signals");
+        const stocks = await res.json();
 
-      // 分開大盤 SPY 與個股
-      const marketRow = stocks.find(s => s.symbol === "SPY");
-      const stockRows = stocks.filter(s => s.symbol !== "SPY");
+        const spyDiv = document.getElementById("spyContent");
+        const grid = document.getElementById("stockGrid");
+        const analysisDiv = document.getElementById("analysisContent");
 
-      // === Summary ===
-      let summaryText = "";
-      if (marketRow) {
-        summaryText = `大盤 (${marketRow.symbol}) 狀態：${marketRow.regime} ｜ `;
-      }
-      summaryText += stockRows.map(s => `${s.symbol} ${s.signal}`).join(" ｜ ");
-      document.getElementById("summary").innerText = "今日建議：" + summaryText;
+        spyDiv.innerHTML = "";
+        grid.innerHTML = "";
+        analysisDiv.innerHTML = "";
 
-      // === 股票卡片 ===
-      const grid = document.getElementById("stockGrid");
-      grid.innerHTML = "";
-      stockRows.forEach(stock => {
-        const card = document.createElement("div");
-        card.className = "card";
-        card.innerHTML = `
-          <h3>${stock.symbol}</h3>
-          <p>Signal：${stock.signal}</p>
-          <p>Regime：${stock.regime}</p>
-          <p>Entry：${stock.entry || '-'}</p>
-          <p>Stop：${stock.stop || '-'}</p>
-          <p>TP：${stock.takeProfit || '-'}</p>
-          <canvas id="chart-${stock.symbol}" height="120"></canvas>
-        `;
-        grid.appendChild(card);
+        stocks.forEach(stock => {
+          if (stock.symbol === "SPY") {
+            spyDiv.innerHTML = `<p>日期：${stock.date} ｜ 狀態：<b>${stock.regime}</b></p>`;
+          } else {
+            // 個股卡片
+            const card = document.createElement("div");
+            card.className = "card";
+            card.innerHTML = `
+              <h3>${stock.symbol}</h3>
+              <p>Signal：${stock.signal}</p>
+              <p>Regime：${stock.regime}</p>
+              <p>Entry：${stock.entry || '-'}</p>
+              <p>Stop：${stock.stop || '-'}</p>
+              <p>TP：${stock.takeProfit || '-'}</p>
+              <canvas id="chart-${stock.symbol}" height="100"></canvas>
+            `;
+            grid.appendChild(card);
 
-        // 均線小圖
-        const labels = ["SMA20","SMA50","SMA200"];
-        const data = [stock.sma20, stock.sma50, stock.sma200];
-        new Chart(document.getElementById(`chart-${stock.symbol}`), {
-          type: 'bar',
-          data: {
-            labels: labels,
-            datasets: [{
-              label: "均線值",
-              data: data,
-              backgroundColor: "rgba(75,192,192,0.5)"
-            }]
-          },
-          options: { responsive: true, plugins:{ legend:{display:false} } }
+            // 均線圖
+            const ctx = document.getElementById(`chart-${stock.symbol}`);
+            new Chart(ctx, {
+              type: 'bar',
+              data: {
+                labels: ["SMA20","SMA50","SMA200"],
+                datasets: [{
+                  label: "均線值",
+                  data: [stock.sma20, stock.sma50, stock.sma200],
+                  backgroundColor: "rgba(75,192,192,0.5)"
+                }]
+              },
+              options: { responsive: true, plugins:{ legend:{display:false} } }
+            });
+
+            // 分析說明
+            let text = "";
+            switch(stock.signal) {
+              case "HOLD":
+                text = `${stock.symbol} 現價 ${stock.entry || "N/A"}，處於 ${stock.regime} 趨勢，暫無突破訊號，建議持有觀望。`;
+                break;
+              case "BUY":
+                text = `${stock.symbol} 出現買進訊號（RSI=${stock.rsi}），建議進場 ${stock.entry}，停損 ${stock.stop}，目標 ${stock.takeProfit}。`;
+                break;
+              case "SELL":
+                text = `${stock.symbol} 出現賣出訊號，走勢轉弱，建議停利或停損出場。`;
+                break;
+              default:
+                text = `${stock.symbol} 無明確訊號。`;
+            }
+            if (stock.note) text += `（${stock.note}）`;
+            const p = document.createElement("p");
+            p.innerHTML = `<span class="stock-title">${stock.symbol}：</span> ${text}`;
+            analysisDiv.appendChild(p);
+          }
         });
-      });
 
-      // === 分析說明 ===
-      const analysisDiv = document.getElementById("analysisContent");
-      analysisDiv.innerHTML = "";
-
-      if (marketRow) {
-        const marketP = document.createElement("p");
-        marketP.innerHTML = `<span class="stock-title">大盤 (${marketRow.symbol})：</span> 今日屬於 ${marketRow.regime} 狀態。`;
-        analysisDiv.appendChild(marketP);
+      } catch (err) {
+        document.getElementById("spyContent").innerText = "⚠️ 無法載入 SPY 資料";
+        document.getElementById("stockGrid").innerText = "⚠️ 無法載入個股資料";
+        document.getElementById("analysisContent").innerText = "⚠️ 無法載入分析";
+        console.error(err);
       }
-
-      stockRows.forEach(stock => {
-        let text = "";
-        switch(stock.signal) {
-          case "HOLD":
-            text = `${stock.symbol} 現價 ${stock.entry || "N/A"}，屬於 ${stock.regime} 趨勢，暫無突破訊號，建議觀望。`;
-            break;
-          case "BUY":
-            text = `${stock.symbol} 出現買進訊號（RSI=${stock.rsi}），建議進場價 ${stock.entry}，停損 ${stock.stop}，目標價 ${stock.takeProfit}。`;
-            break;
-          case "SELL":
-            text = `${stock.symbol} 走勢轉弱，出現賣出訊號，可考慮出場。`;
-            break;
-          default:
-            text = `${stock.symbol} 無明確訊號。`;
-        }
-        if (stock.note) text += `（${stock.note}）`;
-
-        const p = document.createElement("p");
-        p.innerHTML = `<span class="stock-title">${stock.symbol}：</span> ${text}`;
-        analysisDiv.appendChild(p);
-      });
-
-    } catch (err) {
-      document.getElementById("summary").innerText = "⚠️ 無法載入資料";
-      console.error(err);
     }
-  }
 
-  async function loadNews() {
-    try {
-      const res = await fetch(WEBAPP_URL + "?type=news");
-      const news = await res.json();
-
-      const newsDiv = document.getElementById("newsContent");
-      newsDiv.innerHTML = "";
-
-      news.forEach(item => {
-        const p = document.createElement("p");
-
-        const a = document.createElement("a");
-        a.href = item.url.startsWith("http") ? item.url : "https://" + item.url;
-        a.target = "_blank";
-        a.innerText = item.title || "[無標題]";
-
-        p.appendChild(a);
-        if (item.summary) {
-          const span = document.createElement("span");
-          span.innerText = " - " + item.summary;
-          p.appendChild(span);
-        }
-        newsDiv.appendChild(p);
-      });
-    } catch (err) {
-      document.getElementById("newsContent").innerText = "⚠️ 無法載入新聞";
-      console.error(err);
+    async function loadNews() {
+      try {
+        const res = await fetch(WEBAPP_URL + "?type=news");
+        const news = await res.json();
+        const newsDiv = document.getElementById("newsContent");
+        newsDiv.innerHTML = "";
+        news.forEach(item => {
+          const p = document.createElement("p");
+          const a = document.createElement("a");
+          a.href = item.url;
+          a.target = "_blank";
+          a.innerText = `[${item.source}] ${item.title}`;
+          p.appendChild(a);
+          if (item.summary) {
+            const span = document.createElement("span");
+            span.innerText = " - " + item.summary;
+            p.appendChild(span);
+          }
+          newsDiv.appendChild(p);
+        });
+      } catch (err) {
+        document.getElementById("newsContent").innerText = "⚠️ 無法載入新聞";
+        console.error(err);
+      }
     }
-  }
 
-  // 初始化
-  loadSignals();
-  loadNews();
-</script>
-
+    // 初始化
+    loadSignals();
+    loadNews();
+  </script>
 </body>
 </html>
