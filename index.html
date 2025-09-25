@@ -1,203 +1,211 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh">
 <head>
-  <meta charset="UTF-8" />
-  <title>股票監控看板</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="UTF-8">
+  <title>投資資訊 BI Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://www.gstatic.com/charts/loader.js"></script>
   <style>
-    :root { --card-gap: 20px; }
-    body { font-family: Arial, Helvetica, sans-serif; margin: 24px; color:#111; background:#f9f9f9; }
-    h1 { text-align:center; margin: 10px 0 12px; }
-    #summary { text-align:center; font-weight:600; margin-bottom:20px; color:#333; }
-    .grid {
-      display:grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: var(--card-gap);
-      width: 100%;
-      max-width: 1200px;
-      margin: 0 auto 28px;
-      align-items: start;
-    }
-    @media (max-width: 900px) {
-      .grid { grid-template-columns: repeat(2, 1fr); }
-    }
-    .card {
-      background:white;
-      border-radius:12px;
-      padding:16px;
-      box-shadow:0 2px 6px rgba(0,0,0,0.08);
-    }
-    .card h3 { margin:0 0 10px; font-size:16px; }
-    .analysis, .news {
-      max-width: 1000px;
-      margin: 0 auto 28px;
-      padding: 20px;
-      background: #fff;
-      border-radius: 12px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-    }
-    .analysis h2, .news h2 {
-      margin-bottom: 12px;
-      text-align: center;
-    }
-    .analysis p, .news p {
-      margin: 6px 0;
-      line-height: 1.6;
-    }
-    .stock-title {
-      font-weight: bold;
-      color: #333;
-    }
-    .news a {
-      color: #0066cc;
-      text-decoration: none;
-    }
-    .news a:hover {
-      text-decoration: underline;
-    }
+    body { font-family: "Microsoft JhengHei", sans-serif; background: #f5f7fa; margin: 20px; }
+    h1 { text-align: center; margin-bottom: 20px; }
+    .filters { text-align: center; margin-bottom: 20px; }
+    select { margin: 0 10px; padding: 5px; }
+    #market-summary { text-align:center; font-weight:bold; margin-bottom:20px; font-size: 18px; }
+    .kpi-container { display: flex; justify-content: space-around; margin-bottom: 30px; flex-wrap: wrap; gap: 10px; }
+    .kpi { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center; width: 22%; min-width: 180px; }
+    .news-container { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-top: 30px; }
+    .news-item { margin-bottom: 10px; }
+    .news-item a { text-decoration: none; color: #0077cc; }
   </style>
 </head>
 <body>
-  <h1>股票監控看板</h1>
-  <div id="summary">今日建議載入中...</div>
 
-  <div class="grid" id="stockGrid"></div>
+<h1>📊 投資資訊 BI Dashboard</h1>
 
-  <!-- 分析說明 -->
-  <div class="analysis">
-    <h2>📊 分析說明</h2>
-    <div id="analysisContent"></div>
-  </div>
+<!-- 篩選器 -->
+<div class="filters">
+  <label for="companyFilter">選擇公司：</label>
+  <select id="companyFilter" onchange="applyFilter()">
+    <option value="All">All</option>
+    <option value="Alibaba">Alibaba</option>
+    <option value="Nvidia">Nvidia</option>
+    <option value="UnitedHealth">UnitedHealth</option>
+    <option value="Tesla">Tesla</option>
+  </select>
 
-  <!-- 新聞摘要 -->
-  <div class="news">
-    <h2>📰 最新消息摘要</h2>
-    <div id="newsContent">載入中...</div>
-  </div>
+  <label for="dateFilter">日期範圍：</label>
+  <select id="dateFilter" onchange="applyFilter()">
+    <option value="All">全部</option>
+    <option value="7">最近 7 天</option>
+    <option value="30">最近 30 天</option>
+  </select>
+</div>
 
-  <script>
-    const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwTihz3-zh_A-sOX9yhRehETUNqsgOFCAQljpKRfj7R5P6SSUpyJezo9bremy7JiYkyWQ/exec"; // ← 換成你部署的 doGet 網址
+<!-- 大盤 Summary -->
+<div id="market-summary">大盤狀態載入中...</div>
 
-    async function loadSignals() {
-      try {
-        const res = await fetch(WEBAPP_URL + "?type=signals");
-        const stocks = await res.json();
+<!-- KPI 與圖表 -->
+<div class="kpi-container" id="kpi-cards"></div>
+<canvas id="stockChart" height="100"></canvas>
 
-        // === 更新 Summary ===
-        const summary = stocks.map(s => `${s.symbol} ${s.signal}`).join(" ｜ ");
-        document.getElementById("summary").innerText = "今日建議：" + summary;
+<!-- 新聞 -->
+<div class="news-container">
+  <h2>最新消息</h2>
+  <div id="news-list"></div>
+</div>
 
-        // === 更新股票卡片 ===
-        const grid = document.getElementById("stockGrid");
-        grid.innerHTML = "";
-        stocks.forEach(stock => {
-          const card = document.createElement("div");
-          card.className = "card";
-          card.innerHTML = `
-  <h3>${stock.symbol}</h3>
-  <p>現價：${stock.price || '-'}</p>
-  <p>Signal：${stock.signal}</p>
-  <p>Regime：${stock.regime}</p>
-  <p>Entry：${stock.entry || '-'}</p>
-  <p>Stop：${stock.stop || '-'}</p>
-  <p>TP：${stock.takeProfit || '-'}</p>
-  <canvas id="chart-${stock.symbol}" height="120"></canvas>
-`;
-          grid.appendChild(card);
+<script>
+  const sheetId = "16Ez6rBX12fI0zm7EIz01UQiiXRNWDBtJwH65TlWiPI0"; // 你的 Google Sheet ID
 
-          // 繪製均線簡單圖
-          const labels = ["SMA20","SMA50","SMA200"];
-          const data = [stock.sma20, stock.sma50, stock.sma200];
-          new Chart(document.getElementById(`chart-${stock.symbol}`), {
-            type: 'bar',
-            data: {
-              labels: labels,
-              datasets: [{
-                label: "均線值",
-                data: data,
-                backgroundColor: "rgba(75,192,192,0.5)"
-              }]
-            },
-            options: { responsive: true, plugins:{ legend:{display:false} } }
-          });
-        });
+  let allStockData = null;
+  let allNewsData = null;
+  let stockChart = null;
 
-        // === 更新分析說明 ===
-        const analysisDiv = document.getElementById("analysisContent");
-        analysisDiv.innerHTML = "";
+  google.charts.load('current', {'packages':['corechart']});
+  google.charts.setOnLoadCallback(loadData);
 
-        stocks.forEach(stock => {
-          let text = "";
-          switch(stock.signal) {
-  case "HOLD":
-    text = `${stock.symbol} 現價 ${stock.price || stock.entry || "N/A"}，目前屬於 ${stock.regime} 趨勢。` +
-           ` 技術面觀察：SMA20=${stock.sma20}，SMA50=${stock.sma50}，SMA200=${stock.sma200}，RSI=${stock.rsi}。` +
-           ` 沒有出現明顯的買進或賣出突破訊號，因此建議暫時觀望持有。`;
-    break;
-  case "BUY":
-    text = `${stock.symbol} 出現買進訊號。條件符合：20日均線上穿50日，RSI=${stock.rsi} (<60)，屬於 ${stock.regime} 趨勢。` +
-           ` 建議進場價 ${stock.entry}，停損 ${stock.stop}，目標價 ${stock.takeProfit}。`;
-    break;
-  case "SELL":
-    text = `${stock.symbol} 走勢轉弱，跌破重要均線或動能不足。` +
-           ` 現價 ${stock.price || stock.entry || "N/A"}，屬於 ${stock.regime} 趨勢，` +
-           ` 建議可考慮獲利了結或停損出場。`;
-    break;
-  default:
-    text = `${stock.symbol} 現價 ${stock.price || stock.entry || "N/A"}，指標資料不足或尚未形成明確訊號。` +
-           ` 技術面：SMA20=${stock.sma20}，SMA50=${stock.sma50}，SMA200=${stock.sma200}，RSI=${stock.rsi}。` +
-           ` 建議持續觀察。`;
-}
+  async function loadData() {
+    await loadStocks();
+    await loadNews();
+  }
 
-          if (stock.note) text += `（${stock.note}）`;
+  // 抓股價
+  function loadStocks() {
+    const query = new google.visualization.Query(
+      `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?sheet=stocks&range=A:F`
+    );
+    query.send(response => {
+      allStockData = response.getDataTable();
+      renderStocks("All", "All");
+    });
+  }
 
-          const p = document.createElement("p");
-          p.innerHTML = `<span class="stock-title">${stock.symbol}：</span> ${text}`;
-          analysisDiv.appendChild(p);
-        });
+  function renderStocks(filterCompany, filterDays) {
+    const data = allStockData;
+    const numRows = data.getNumberOfRows();
 
-      } catch (err) {
-        document.getElementById("summary").innerText = "⚠️ 無法載入資料";
-        console.error(err);
+    let labels = [];
+    let datasetsMap = {};
+    let lastValues = {};
+    let cutoffDate = null;
+    let spyRegime = "N/A";
+
+    if (filterDays !== "All") {
+      cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - parseInt(filterDays));
+    }
+
+    for (let i = 0; i < numRows; i++) {
+      const dateStr = data.getValue(i, 0);
+      const company = data.getValue(i, 1);
+      const close = data.getValue(i, 3);
+      const changePct = data.getValue(i, 5);
+
+      const rowDate = new Date(dateStr);
+
+      if (filterCompany !== "All" && company !== filterCompany) continue;
+      if (cutoffDate && rowDate < cutoffDate) continue;
+
+      if (!datasetsMap[company]) datasetsMap[company] = [];
+      datasetsMap[company].push(close);
+
+      if (!labels.includes(dateStr)) labels.push(dateStr);
+
+      lastValues[company] = { close, changePct };
+
+      // 大盤判斷（只對 SPY 做 SMA200）
+      if (company === "SPY" && datasetsMap[company].length >= 200) {
+        const closes = datasetsMap[company].slice(-200);
+        const sma200 = closes.reduce((a,b)=>a+b,0)/closes.length;
+        spyRegime = close > sma200 ? "BULL" : "BEAR";
       }
     }
 
-    async function loadNews() {
-      try {
-        const res = await fetch(WEBAPP_URL + "?type=news");
-        const news = await res.json();
+    // === 更新大盤 Summary ===
+    document.getElementById("market-summary").innerText = 
+      `大盤 (SPY) 狀態：${spyRegime}`;
 
-        const newsDiv = document.getElementById("newsContent");
-        newsDiv.innerHTML = "";
-
-        news.forEach(item => {
-          const p = document.createElement("p");
-
-          const a = document.createElement("a");
-    
-a.href = item.url;  // 直接用 doGet 回傳的 url
-a.target = "_blank";
-a.innerText = item.title || "[無標題]";
-      
-
-          p.appendChild(a);
-          if (item.summary) {
-            const span = document.createElement("span");
-            span.innerText = " - " + item.summary;
-            p.appendChild(span);
-          }
-          newsDiv.appendChild(p);
-        });
-      } catch (err) {
-        document.getElementById("newsContent").innerText = "⚠️ 無法載入新聞";
-        console.error(err);
-      }
+    // === KPI Cards ===
+    const kpiContainer = document.getElementById("kpi-cards");
+    kpiContainer.innerHTML = "";
+    for (const company in lastValues) {
+      if (company === "SPY") continue; // 不把SPY顯示在KPI
+      const { close, changePct } = lastValues[company];
+      const kpi = document.createElement("div");
+      kpi.className = "kpi";
+      kpi.innerHTML = `<h2>${company}</h2>
+                       <p>$${close} ${changePct > 0 ? "▲" : "▼"}${changePct.toFixed(2)}%</p>`;
+      kpiContainer.appendChild(kpi);
     }
 
-    // 初始化
-    loadSignals();
-    loadNews();
-  </script>
+    // === Chart ===
+    if (stockChart) stockChart.destroy();
+    const ctx = document.getElementById('stockChart');
+    stockChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: Object.keys(datasetsMap)
+          .filter(c => c !== "SPY") // 圖表只畫個股
+          .map((company, idx) => ({
+            label: company,
+            data: datasetsMap[company],
+            borderColor: ["red","green","blue","orange"][idx % 4],
+            fill: false
+          }))
+      },
+      options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+    });
+  }
+
+  // 抓新聞
+  function loadNews() {
+    const query = new google.visualization.Query(
+      `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?sheet=news&range=A:E`
+    );
+    query.send(response => {
+      allNewsData = response.getDataTable();
+      renderNews("All", "All");
+    });
+  }
+
+  function renderNews(filterCompany, filterDays) {
+    const data = allNewsData;
+    const numRows = data.getNumberOfRows();
+    const newsList = document.getElementById("news-list");
+    newsList.innerHTML = "";
+
+    let cutoffDate = null;
+    if (filterDays !== "All") {
+      cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - parseInt(filterDays));
+    }
+
+    for (let i = 0; i < numRows; i++) {
+      const company = data.getValue(i, 1);
+      const title = data.getValue(i, 2);
+      const link = data.getValue(i, 3);
+      const pubDateStr = data.getValue(i, 4);
+      const pubDate = new Date(pubDateStr);
+
+      if (filterCompany !== "All" && company !== filterCompany) continue;
+      if (cutoffDate && pubDate < cutoffDate) continue;
+
+      const item = document.createElement("div");
+      item.className = "news-item";
+      item.innerHTML = `<b>${company}</b>: <a href="${link}" target="_blank">${title}</a>`;
+      newsList.appendChild(item);
+    }
+  }
+
+  // 篩選器套用
+  function applyFilter() {
+    const company = document.getElementById("companyFilter").value;
+    const days = document.getElementById("dateFilter").value;
+    renderStocks(company, days);
+    renderNews(company, days);
+  }
+</script>
+
 </body>
 </html>
