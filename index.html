@@ -82,18 +82,48 @@
 
         stocks.forEach(stock => {
           if (stock.symbol === "SPY") {
-            spyDiv.innerHTML = `<p>日期：${stock.date} ｜ 狀態：<b>${stock.regime}</b></p>`;
+            let regimeIcon = "⏸️";
+            if (stock.regime === "BULL") regimeIcon = "📈";
+            if (stock.regime === "BEAR") regimeIcon = "📉";
+
+            spyDiv.innerHTML = `<p>
+              日期：${stock.date} ｜ 狀態：${regimeIcon} <b>${stock.regime}</b> ｜ 
+              現價 <span style="color:#0077cc;">${stock.entry}</span> ｜ 
+              漲跌幅：<span style="color:${stock.changePct >= 0 ? '#5cb85c':'#d9534f'};">${stock.changePct}%</span>
+            </p>`;
           } else {
             // 個股卡片
             const card = document.createElement("div");
             card.className = "card";
+
+            let extraFields = "";
+            if (stock.signal === "BUY") {
+              extraFields = `
+                <p><span style="color:#0077cc;">Entry：${stock.entry || '-'}</span></p>
+                <p><span style="color:#d9534f;">Stop：${stock.stop || '-'}</span></p>
+                <p><span style="color:#5cb85c;">TP：${stock.takeProfit || '-'}</span></p>
+                <p>建議倉位：${stock.shares || '-'} 股</p>
+                <p>漲跌幅：<span style="color:${stock.changePct >= 0 ? '#5cb85c':'#d9534f'};">${stock.changePct}%</span></p>
+              `;
+            } else if (stock.signal === "SELL") {
+              extraFields = `
+                <p><span style="color:#0077cc;">現價：${stock.entry || '-'}</span></p>
+                <p><span style="color:#5cb85c;">停利：${stock.takeProfit || '-'}</span></p>
+                <p><span style="color:#d9534f;">停損：${stock.stop || '-'}</span></p>
+                <p>漲跌幅：<span style="color:${stock.changePct >= 0 ? '#5cb85c':'#d9534f'};">${stock.changePct}%</span></p>
+              `;
+            } else {
+              extraFields = `
+                <p><span style="color:#0077cc;">現價：${stock.entry || '-'}</span></p>
+                <p>漲跌幅：<span style="color:${stock.changePct >= 0 ? '#5cb85c':'#d9534f'};">${stock.changePct}%</span></p>
+              `;
+            }
+
             card.innerHTML = `
               <h3>${stock.symbol}</h3>
               <p>Signal：${stock.signal}</p>
               <p>Regime：${stock.regime}</p>
-              <p>Entry：${stock.entry || '-'}</p>
-              <p>Stop：${stock.stop || '-'}</p>
-              <p>TP：${stock.takeProfit || '-'}</p>
+              ${extraFields}
               <canvas id="chart-${stock.symbol}" height="100"></canvas>
             `;
             grid.appendChild(card);
@@ -116,19 +146,34 @@
             // 分析說明
             let text = "";
             switch(stock.signal) {
-  case "HOLD":
-    text = `${stock.symbol} 現價 ${stock.entry}，處於 ${stock.regime} 趨勢，暫無突破訊號，建議持有觀望。`;
-    break;
-  case "BUY":
-    text = `${stock.symbol} 出現買進訊號（RSI=${stock.rsi}），建議進場 ${stock.entry}，停損 ${stock.stop}，目標 ${stock.takeProfit}，建議倉位 ${stock.shares || '-'} 股。`;
-    break;
-  case "SELL":
-    text = `${stock.symbol} 出現賣出訊號，現價 ${stock.entry}，建議停利 ${stock.takeProfit}、停損 ${stock.stop}。`;
-    break;
-  default:
-    text = `${stock.symbol} 無明確訊號。`;
-}
-
+              case "HOLD":
+                text = `⏸️ ${stock.symbol} 現價 <span style="color:#0077cc;">${stock.entry}</span>，
+                  漲跌幅 <span style="color:${stock.changePct >= 0 ? '#5cb85c':'#d9534f'};">${stock.changePct}%</span>，
+                  處於 ${stock.regime} 趨勢，暫無突破訊號，建議持有觀望。`;
+                break;
+              case "BUY":
+                text = `📈 ${stock.symbol} 出現買進訊號（RSI=${stock.rsi}），
+                  進場 <span style="color:#0077cc;">${stock.entry}</span>，
+                  停損 <span style="color:#d9534f;">${stock.stop}</span>，
+                  目標 <span style="color:#5cb85c;">${stock.takeProfit}</span>，
+                  建議倉位 ${stock.shares || '-'} 股，
+                  當日漲跌幅 <span style="color:${stock.changePct >= 0 ? '#5cb85c':'#d9534f'};">${stock.changePct}%</span>。`;
+                break;
+              case "SELL":
+                text = `📉 ${stock.symbol} 出現賣出訊號，
+                  現價 <span style="color:#0077cc;">${stock.entry}</span>，
+                  停利 <span style="color:#5cb85c;">${stock.takeProfit}</span>，
+                  停損 <span style="color:#d9534f;">${stock.stop}</span>，
+                  當日漲跌幅 <span style="color:${stock.changePct >= 0 ? '#5cb85c':'#d9534f'};">${stock.changePct}%</span>。`;
+                break;
+              default:
+                text = `${stock.symbol} 無明確訊號。`;
+            }
+            if (stock.note) text += `（${stock.note}）`;
+            const p = document.createElement("p");
+            p.innerHTML = `<span class="stock-title">${stock.symbol}：</span> ${text}`;
+            analysisDiv.appendChild(p);
+          }
         });
 
       } catch (err) {
@@ -139,63 +184,32 @@
       }
     }
 
-  async function loadNews() {
-  try {
-    const res = await fetch(WEBAPP_URL + "?type=news");
-    let news = await res.json();
-    const newsDiv = document.getElementById("newsContent");
-    newsDiv.innerHTML = "";
+    async function loadNews() {
+      try {
+        const res = await fetch(WEBAPP_URL + "?type=news");
+        const news = await res.json();
+        const newsDiv = document.getElementById("newsContent");
+        newsDiv.innerHTML = "";
 
-    // 先顯示前 10 筆
-    const initialNews = news.slice(0, 10);
-    renderNews(initialNews, newsDiv);
-
-    // 如果超過 10 筆，加上「查看更多」按鈕
-    if (news.length > 10) {
-      const btn = document.createElement("button");
-      btn.innerText = "查看更多";
-      btn.style.marginTop = "12px";
-      btn.style.padding = "8px 16px";
-      btn.style.border = "none";
-      btn.style.borderRadius = "6px";
-      btn.style.background = "#0077cc";
-      btn.style.color = "#fff";
-      btn.style.cursor = "pointer";
-
-      btn.addEventListener("click", () => {
-        // 顯示剩下的新聞
-        const moreNews = news.slice(10);
-        renderNews(moreNews, newsDiv);
-        btn.remove(); // 點擊後移除按鈕
-      });
-
-      newsDiv.appendChild(btn);
+        news.slice(0, 10).forEach(item => {
+          const p = document.createElement("p");
+          const a = document.createElement("a");
+          a.href = item.url;
+          a.target = "_blank";
+          a.innerText = `[${item.source}] ${item.title}`;
+          p.appendChild(a);
+          if (item.summary) {
+            const span = document.createElement("span");
+            span.innerText = " - " + item.summary;
+            p.appendChild(span);
+          }
+          newsDiv.appendChild(p);
+        });
+      } catch (err) {
+        document.getElementById("newsContent").innerText = "⚠️ 無法載入新聞";
+        console.error(err);
+      }
     }
-  } catch (err) {
-    document.getElementById("newsContent").innerText = "⚠️ 無法載入新聞";
-    console.error(err);
-  }
-}
-
-// 共用函式：渲染新聞
-function renderNews(items, container) {
-  items.forEach(item => {
-    const p = document.createElement("p");
-    const a = document.createElement("a");
-    a.href = item.url;
-    a.target = "_blank";
-    a.innerText = `[${item.source}] ${item.title}`;
-    p.appendChild(a);
-
-    if (item.summary) {
-      const span = document.createElement("span");
-      span.innerText = " - " + item.summary;
-      p.appendChild(span);
-    }
-    container.appendChild(p);
-  });
-}
-
 
     // 初始化
     loadSignals();
